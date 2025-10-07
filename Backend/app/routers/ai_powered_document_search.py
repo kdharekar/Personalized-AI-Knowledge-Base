@@ -8,9 +8,12 @@ from app.services.search_documents import SearchService
 from app.models.request_models import SearchQuery, FeedbackRequest
 from app.services.feedback_logger import FeedbackLogger
 import uuid
+from fastapi.templating import Jinja2Templates
 
 
-
+# Point to the folder where your HTML templates are stored
+TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "../../templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 
 feedback_logger = FeedbackLogger()

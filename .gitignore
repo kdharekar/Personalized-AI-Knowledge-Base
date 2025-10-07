@@ -3,4 +3,5 @@
 *.sqlite3
 /Backend/uploaded_files/
 *.pyc
-.csv
+*.csv
+feedback.csv
