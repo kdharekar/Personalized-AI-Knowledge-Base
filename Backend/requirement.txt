@@ -10,3 +10,5 @@ python-dotenv
 langchain-community
 langchain-chroma
 sentence-transformers
+unstructured
+markdown

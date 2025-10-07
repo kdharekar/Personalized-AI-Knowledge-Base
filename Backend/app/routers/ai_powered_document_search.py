@@ -4,6 +4,8 @@ import os
 import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException, status, APIRouter
 from app.services.index_documents import IndexingService
+from app.services.search_documents import SearchService
+from app.models.request_models import SearchQuery
 
 router = APIRouter()
 
@@ -15,6 +17,7 @@ ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md"}
 
 # Instantiate the service and create the index
 indexing_service = IndexingService()
+search_service = SearchService()
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -61,4 +64,21 @@ def upload_document(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error while processing file: {str(e)}"
+        )
+
+@router.post("/search/doc")
+async def search_document(query: SearchQuery):
+    """
+    Endpoint to search the indexed documents.
+    Accepts a JSON body with a "query" field.
+    """
+    try:
+        # Use the pre-initialized search_service instance
+        result = search_service.search(query.query)
+        return JSONResponse(content=result)
+    except Exception as e:
+        # This is a fallback for unexpected errors in the service
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred during the search: {str(e)}"
         )
