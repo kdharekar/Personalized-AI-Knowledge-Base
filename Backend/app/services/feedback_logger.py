@@ -33,7 +33,6 @@ class FeedbackLogger:
         Args:
             feedback_data (dict): A dictionary containing feedback details.
         """
-        # Add a timestamp to the feedback data
         feedback_data['timestamp'] = datetime.now().isoformat()
         
         try:

@@ -11,7 +11,6 @@ import uuid
 from fastapi.templating import Jinja2Templates
 
 
-# Point to the folder where your HTML templates are stored
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "../../templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
@@ -25,7 +24,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 MAX_FILE_SIZE = os.getenv("MAX_FILE_SIZE", 10 * 1024 * 1024)  # 10 MB default
 ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md"}
 
-# Instantiate the service and create the index
 indexing_service = IndexingService()
 search_service = SearchService()
 
@@ -61,8 +59,6 @@ def upload_document(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # --- Index the uploaded document ---
-
         indexing_service.create_index_from_file(file_path)
 
         return JSONResponse(
@@ -74,7 +70,6 @@ def upload_document(file: UploadFile = File(...)):
         )
 
     except Exception as e:
-        # If indexing fails, we still have the file, but should report an error
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error while processing file: {str(e)}"
@@ -87,15 +82,11 @@ async def search_document(query: SearchQuery):
     Accepts a JSON body with a "query" field.
     """
     try:
-        # Use the pre-initialized search_service instance
         search_id = str(uuid.uuid4())
-        # 2. Get the result from the search service
         result = search_service.search(query.query)
-        # 3. Add the search_id to the response
         result['search_id'] = search_id
         return JSONResponse(content=result)
     except Exception as e:
-        # This is a fallback for unexpected errors in the service
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred during the search: {str(e)}"
@@ -108,8 +99,6 @@ async def submit_feedback(feedback: FeedbackRequest):
     The feedback is logged for future analysis and pipeline improvement.
     """
     try:
-        # The Pydantic model has already validated the input
-        # Log the feedback using our service
         feedback_logger.log(feedback.model_dump())
         
         return {"message": "Feedback received successfully. Thank you!"}
