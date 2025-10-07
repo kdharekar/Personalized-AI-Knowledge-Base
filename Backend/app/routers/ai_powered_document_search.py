@@ -1,12 +1,19 @@
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from datetime import date, datetime, timedelta
 import os
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException, status, APIRouter
+from fastapi import FastAPI, UploadFile, File, HTTPException, status, APIRouter, Request
 from app.services.index_documents import IndexingService
 from app.services.search_documents import SearchService
-from app.models.request_models import SearchQuery
+from app.models.request_models import SearchQuery, FeedbackRequest
+from app.services.feedback_logger import FeedbackLogger
+import uuid
 
+
+
+
+
+feedback_logger = FeedbackLogger()
 router = APIRouter()
 
 UPLOAD_DIR = "uploaded_files"
@@ -18,6 +25,10 @@ ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md"}
 # Instantiate the service and create the index
 indexing_service = IndexingService()
 search_service = SearchService()
+
+@router.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -74,11 +85,33 @@ async def search_document(query: SearchQuery):
     """
     try:
         # Use the pre-initialized search_service instance
+        search_id = str(uuid.uuid4())
+        # 2. Get the result from the search service
         result = search_service.search(query.query)
+        # 3. Add the search_id to the response
+        result['search_id'] = search_id
         return JSONResponse(content=result)
     except Exception as e:
         # This is a fallback for unexpected errors in the service
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred during the search: {str(e)}"
+        )
+
+@router.post("/feedback", status_code=status.HTTP_201_CREATED)
+async def submit_feedback(feedback: FeedbackRequest):
+    """
+    Endpoint for users to submit feedback on an answer.
+    The feedback is logged for future analysis and pipeline improvement.
+    """
+    try:
+        # The Pydantic model has already validated the input
+        # Log the feedback using our service
+        feedback_logger.log(feedback.model_dump())
+        
+        return {"message": "Feedback received successfully. Thank you!"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to log feedback: {str(e)}"
         )

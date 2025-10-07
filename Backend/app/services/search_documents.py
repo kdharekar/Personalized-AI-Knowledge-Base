@@ -6,6 +6,11 @@ from langchain.schema.output_parser import StrOutputParser
 from langchain_core.output_parsers import JsonOutputParser
 from dotenv import load_dotenv
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import WikipediaLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import time
+
+
 
 
 # Load environment variables
@@ -59,6 +64,11 @@ class SearchService:
 
         # 4. Initialize the LLM
         self.llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200
+        )
         
         # 5. Create the RAG Prompt from the template
         rag_prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
@@ -75,23 +85,69 @@ class SearchService:
         )
         print("SearchService initialized successfully. Ready to receive queries.")
 
+    def _enrich_index_from_wikipedia(self, search_query: str) -> bool:
+        """
+        Searches Wikipedia, loads the content, and adds it to the vector store.
+        """
+        print(f"Knowledge gap detected. Attempting to enrich from Wikipedia for query: '{search_query}'")
+        try:
+            # Use the LangChain loader to fetch the top search result from Wikipedia
+            loader = WikipediaLoader(query=search_query, load_max_docs=2, lang="en")
+            new_docs = loader.load()
+
+            if not new_docs:
+                print(f"Could not find a relevant Wikipedia page for '{search_query}'.")
+                return False
+
+            # Split the new documents into chunks
+            chunks = self.text_splitter.split_documents(new_docs)
+            
+            # Add the new chunks to the existing vector store
+            self.vector_store.add_documents(chunks)
+            # Short delay to allow the index to update, though Chroma is often fast
+            time.sleep(1) 
+            
+            page_title = new_docs[0].metadata.get("title", "Unknown Page")
+            print(f"Successfully enriched knowledge base with '{page_title}' from Wikipedia.")
+            return True
+
+        except Exception as e:
+            print(f"An error occurred during Wikipedia enrichment: {e}")
+            return False
+
     def search(self, query: str):
         """
-        Performs a search using the RAG chain.
-
-        Args:
-            query (str): The user's question.
-
-        Returns:
-            dict: A dictionary containing the structured answer from the LLM.
+        Performs a search. If a knowledge gap is found, it attempts to
+        auto-enrich the knowledge base from Wikipedia and tries again.
         """
         try:
-            print(f"Executing search for query: '{query}'")
-            result = self.rag_chain.invoke(query)
-            return result
+            # --- Step 1: Initial Search ---
+            print(f"Executing initial search for query: '{query}'")
+            initial_result = self.rag_chain.invoke(query)
+
+            # --- Step 2: Analyze the Response (The "Gap Check") ---
+            confidence = initial_result.get("confidence", 0.0)
+            missing_info = initial_result.get("missing_info", "")
+
+            # If confidence is low and the model identified missing info, trigger enrichment
+            if confidence < 0.5 and missing_info:
+                # --- Step 3: Trigger Enrichment ---
+                # We use the original query as it's the purest form of user intent
+                enrichment_successful = self._enrich_index_from_wikipedia(query)
+                
+                if enrichment_successful:
+                    # --- Step 5: Re-run the Search ---
+                    print("Re-running search with enriched knowledge base...")
+                    final_result = self.rag_chain.invoke(query)
+                    # Optionally, add a note that the knowledge base was updated
+                    final_result["enrichment_status"] = f"Knowledge base was auto-enriched from Wikipedia to provide this answer."
+                    return final_result
+
+            # If no enrichment was needed or it failed, return the first result
+            return initial_result
+
         except Exception as e:
             print(f"An error occurred during search: {e}")
-            # In case of a JSON parsing error or other failure, return a structured error
             return {
                 "answer": "An error occurred while processing your request.",
                 "confidence": 0.0,
