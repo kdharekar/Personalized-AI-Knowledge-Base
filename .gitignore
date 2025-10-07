@@ -1,0 +1,5 @@
+.env
+*.bin
+*.sqlite3
+/Backend/uploaded_files/
+*.pyc
